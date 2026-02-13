@@ -1,76 +1,58 @@
 import pandas as pd
-import glob
-import os
 
-print("📊 Professional NSE Swing Scanner Running...\n")
+# ==============================
+# 1️⃣ Load Bhavcopy
+# ==============================
 
-# ---- AUTO DETECT LATEST CSV ----
-csv_files = glob.glob("*.csv")
+file_path = "data/bhavcopy.csv"
+df = pd.read_csv(file_path)
 
-if not csv_files:
-    print("❌ No CSV file found in directory.")
-    exit()
-
-latest_file = max(csv_files, key=os.path.getctime)
-
-print(f"📁 Detected file: {latest_file}")
-
-df = pd.read_csv(latest_file)
-
-# ---- CLEAN DATA ----
+# Clean column names
 df.columns = df.columns.str.strip()
 
-# Keep only EQ series
-df = df[df["SERIES"] == "EQ"]
-
-# Convert required columns safely
+# Convert numeric columns
 numeric_cols = [
-    "OPEN_PRICE", "HIGH_PRICE", "LOW_PRICE",
-    "CLOSE_PRICE", "TTL_TRD_QNTY",
-    "DELIV_QTY", "DELIV_PER",
-    "TURNOVER_LACS"
+    "OPEN_PRICE", "HIGH_PRICE", "LOW_PRICE", "CLOSE_PRICE",
+    "TTL_TRD_QNTY", "DELIV_QTY", "DELIV_PER"
 ]
 
 for col in numeric_cols:
-    if col in df.columns:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
+    df[col] = pd.to_numeric(df[col], errors="coerce")
 
-df = df.dropna()
+# ==============================
+# 2️⃣ Professional Filters
+# ==============================
 
-# ---- LIQUIDITY FILTER ----
-df = df[df["TURNOVER_LACS"] > 500]
+# Filter 1: Price > 100 (avoid junk stocks)
+price_filter = df["CLOSE_PRICE"] > 100
 
-# ---- CLOSE STRENGTH ----
-df["Close_Strength"] = (
-    (df["CLOSE_PRICE"] - df["LOW_PRICE"]) /
-    (df["HIGH_PRICE"] - df["LOW_PRICE"] + 0.0001)
-)
+# Filter 2: Strong Volume (above average)
+volume_filter = df["TTL_TRD_QNTY"] > df["TTL_TRD_QNTY"].mean()
 
-# ---- BREAKOUT CANDIDATES ----
-breakout = df[
-    (df["Close_Strength"] > 0.7) &
-    (df["DELIV_PER"] > 45)
-].copy()
+# Filter 3: Strong Delivery (> 40%)
+delivery_filter = df["DELIV_PER"] > 40
 
-breakout["Score"] = (
-    breakout["DELIV_PER"] * 0.6 +
-    breakout["Close_Strength"] * 40
-)
+# Filter 4: Bullish Close (closing near high)
+range_value = df["HIGH_PRICE"] - df["LOW_PRICE"]
+bullish_close = (df["CLOSE_PRICE"] - df["LOW_PRICE"]) / range_value > 0.6
 
-breakout = breakout.sort_values("Score", ascending=False)
+# Combine All Filters
+scanner = df[
+    price_filter &
+    volume_filter &
+    delivery_filter &
+    bullish_close
+]
 
-# ---- ACCUMULATION CANDIDATES ----
-accumulation = df[
-    (df["DELIV_PER"] > 60) &
-    (df["Close_Strength"] > 0.5)
-].copy()
+# Select Important Columns
+scanner = scanner[[
+    "SYMBOL",
+    "CLOSE_PRICE",
+    "TTL_TRD_QNTY",
+    "DELIV_PER"
+]]
 
-accumulation = accumulation.sort_values("DELIV_PER", ascending=False)
+# Sort by Delivery %
+scanner = scanner.sort_values(by="DELIV_PER", ascending=False)
 
-# ---- SAVE OUTPUT ----
-with pd.ExcelWriter("swing_output.xlsx") as writer:
-    breakout.to_excel(writer, sheet_name="Breakout", index=False)
-    accumulation.to_excel(writer, sheet_name="Accumulation", index=False)
-
-print("✅ Scanner Completed Successfully")
-print("📁 Output File Created: swing_output.xlsx")
+# ==============================
