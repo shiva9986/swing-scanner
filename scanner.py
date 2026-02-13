@@ -1,32 +1,65 @@
-import streamlit as st
 import pandas as pd
 
-st.title("📊 Professional NSE Swing Scanner")
+print("📊 Professional NSE Swing Scanner Running...\n")
 
-uploaded_file = st.file_uploader("Upload NSE Full Bhavcopy CSV", type=["csv"])
+# Load bhavcopy file
+file_name = "sec_bhavdata_full_13022026.csv"
+df = pd.read_csv(file_name)
 
-if uploaded_file is not None:
-    df = pd.read_csv(uploaded_file)
+# Clean column names
+df.columns = df.columns.str.strip()
 
-    st.write("Columns detected:", df.columns)
+# Keep only EQ series
+df = df[df["SERIES"] == "EQ"]
 
-    # Keep only EQ series
-    df = df[df["SERIES"] == "EQ"]
+# Convert required columns
+numeric_cols = [
+    "OPEN_PRICE", "HIGH_PRICE", "LOW_PRICE",
+    "CLOSE_PRICE", "TTL_TRD_QNTY",
+    "DELIV_QTY", "DELIV_PER",
+    "TURNOVER_LACS"
+]
 
-    # Convert numeric columns
-    numeric_cols = ["CLOSE_PRICE", "TOTTRDQTY", "DELIV_PER"]
-    for col in numeric_cols:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
+for col in numeric_cols:
+    df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    # Filters
-    volume_filter = df["TOTTRDQTY"] > df["TOTTRDQTY"].mean()
-    delivery_filter = df["DELIV_PER"] > 40
-    price_filter = df["CLOSE_PRICE"] > 100
+# Remove rows with missing data
+df = df.dropna()
 
-    scanner = df[volume_filter & delivery_filter & price_filter]
+# Liquidity Filter (avoid junk stocks)
+df = df[df["TURNOVER_LACS"] > 500]
 
-    st.subheader("🔥 Swing Candidates")
-    st.dataframe(scanner.sort_values("TOTTRDQTY", ascending=False))
+# Close Strength (close near high)
+df["Close_Strength"] = (
+    (df["CLOSE_PRICE"] - df["LOW_PRICE"]) /
+    (df["HIGH_PRICE"] - df["LOW_PRICE"] + 0.0001)
+)
 
-else:
-    st.info("Upload bhavcopy file to start scanning")
+# 🔥 Breakout Candidates
+breakout = df[
+    (df["Close_Strength"] > 0.7) &
+    (df["DELIV_PER"] > 45)
+].copy()
+
+breakout["Score"] = (
+    breakout["DELIV_PER"] * 0.6 +
+    breakout["Close_Strength"] * 40
+)
+
+breakout = breakout.sort_values("Score", ascending=False)
+
+# 🏗 Accumulation Candidates
+accumulation = df[
+    (df["DELIV_PER"] > 60) &
+    (df["Close_Strength"] > 0.5)
+].copy()
+
+accumulation = accumulation.sort_values("DELIV_PER", ascending=False)
+
+# Save output
+with pd.ExcelWriter("swing_output.xlsx") as writer:
+    breakout.to_excel(writer, sheet_name="Breakout", index=False)
+    accumulation.to_excel(writer, sheet_name="Accumulation", index=False)
+
+print("✅ Scanner Completed Successfully")
+print("📁 Output File Created: swing_output.xlsx")
