@@ -1,51 +1,32 @@
+import streamlit as st
 import pandas as pd
 
-print("🔥 NSE Professional Swing Scanner Starting...\n")
+st.title("📊 Professional NSE Swing Scanner")
 
-# Load Bhavcopy file
-df = pd.read_csv("sec_bhavdata_full.csv")
+uploaded_file = st.file_uploader("Upload NSE Full Bhavcopy CSV", type=["csv"])
 
-# Clean column names
-df.columns = df.columns.str.strip()
+if uploaded_file is not None:
+    df = pd.read_csv(uploaded_file)
 
-# Filter only EQ series
-df = df[df["SERIES"] == "EQ"]
+    st.write("Columns detected:", df.columns)
 
-# Convert required columns to numeric
-numeric_cols = ["CLOSE_PRICE", "TOTTRDQTY", "DELIV_PER"]
+    # Keep only EQ series
+    df = df[df["SERIES"] == "EQ"]
 
-for col in numeric_cols:
-    df[col] = pd.to_numeric(df[col], errors="coerce")
+    # Convert numeric columns
+    numeric_cols = ["CLOSE_PRICE", "TOTTRDQTY", "DELIV_PER"]
+    for col in numeric_cols:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
 
-# Basic Filters (Professional Structure)
+    # Filters
+    volume_filter = df["TOTTRDQTY"] > df["TOTTRDQTY"].mean()
+    delivery_filter = df["DELIV_PER"] > 40
+    price_filter = df["CLOSE_PRICE"] > 100
 
-# 1️⃣ High Volume Stocks
-volume_filter = df["TOTTRDQTY"] > df["TOTTRDQTY"].mean()
+    scanner = df[volume_filter & delivery_filter & price_filter]
 
-# 2️⃣ Strong Delivery
-delivery_filter = df["DELIV_PER"] > 40
+    st.subheader("🔥 Swing Candidates")
+    st.dataframe(scanner.sort_values("TOTTRDQTY", ascending=False))
 
-# 3️⃣ Price Above 100
-price_filter = df["CLOSE_PRICE"] > 100
-
-# Combine all filters
-scanner = df[volume_filter & delivery_filter & price_filter]
-
-# Sort by Delivery %
-scanner = scanner.sort_values(by="DELIV_PER", ascending=False)
-
-# Select Important Columns
-final_output = scanner[[
-    "SYMBOL",
-    "CLOSE_PRICE",
-    "TOTTRDQTY",
-    "DELIV_PER"
-]]
-
-# Save Output
-final_output.to_csv("scanner_output.csv", index=False)
-
-print("✅ Scanner Completed!")
-print("📁 Output file created: scanner_output.csv")
-print("\nTop Results:\n")
-print(final_output.head(15))
+else:
+    st.info("Upload bhavcopy file to start scanning")
