@@ -1,58 +1,75 @@
 import pandas as pd
+from datetime import datetime
 
-# ==============================
+print("🚀 Starting NSE Swing Scanner...")
+
+# ==========================
 # 1️⃣ Load Bhavcopy
-# ==============================
+# ==========================
+try:
+    df = pd.read_csv("data/bhavcopy.csv")
+    print("✅ Bhavcopy Loaded Successfully")
+except Exception as e:
+    print("❌ Error loading bhavcopy:", e)
+    exit()
 
-file_path = "data/bhavcopy.csv"
-df = pd.read_csv(file_path)
-
-# Clean column names
+# ==========================
+# 2️⃣ Clean Data
+# ==========================
 df.columns = df.columns.str.strip()
 
-# Convert numeric columns
 numeric_cols = [
-    "OPEN_PRICE", "HIGH_PRICE", "LOW_PRICE", "CLOSE_PRICE",
-    "TTL_TRD_QNTY", "DELIV_QTY", "DELIV_PER"
+    "OPEN_PRICE",
+    "HIGH_PRICE",
+    "LOW_PRICE",
+    "CLOSE_PRICE",
+    "TOTTRDQTY",
+    "DELIV_QTY",
+    "DELIV_PER"
 ]
 
 for col in numeric_cols:
     df[col] = pd.to_numeric(df[col], errors="coerce")
 
-# ==============================
-# 2️⃣ Professional Filters
-# ==============================
+df = df.dropna()
 
-# Filter 1: Price > 100 (avoid junk stocks)
-price_filter = df["CLOSE_PRICE"] > 100
+# ==========================
+# 3️⃣ Professional Filters
+# ==========================
 
-# Filter 2: Strong Volume (above average)
-volume_filter = df["TTL_TRD_QNTY"] > df["TTL_TRD_QNTY"].mean()
+# High Volume (Above 20-day type logic approximation)
+volume_filter = df["TOTTRDQTY"] > df["TOTTRDQTY"].mean()
 
-# Filter 3: Strong Delivery (> 40%)
+# Strong Delivery
 delivery_filter = df["DELIV_PER"] > 40
 
-# Filter 4: Bullish Close (closing near high)
-range_value = df["HIGH_PRICE"] - df["LOW_PRICE"]
-bullish_close = (df["CLOSE_PRICE"] - df["LOW_PRICE"]) / range_value > 0.6
+# Price Above 100
+price_filter = df["CLOSE_PRICE"] > 100
 
-# Combine All Filters
+# Bullish Candle
+candle_filter = df["CLOSE_PRICE"] > df["OPEN_PRICE"]
+
+# Combine
 scanner = df[
-    price_filter &
     volume_filter &
     delivery_filter &
-    bullish_close
+    price_filter &
+    candle_filter
 ]
 
-# Select Important Columns
-scanner = scanner[[
-    "SYMBOL",
-    "CLOSE_PRICE",
-    "TTL_TRD_QNTY",
-    "DELIV_PER"
-]]
-
-# Sort by Delivery %
+# ==========================
+# 4️⃣ Sort By Delivery %
+# ==========================
 scanner = scanner.sort_values(by="DELIV_PER", ascending=False)
 
-# ==============================
+# ==========================
+# 5️⃣ Save Output
+# ==========================
+today = datetime.now().strftime("%d-%m-%Y")
+output_file = f"output_swing_{today}.csv"
+
+scanner.to_csv(output_file, index=False)
+
+print("🎯 Scanner Completed")
+print("📊 Stocks Found:", len(scanner))
+print("📁 Output File Created:", output_file)
