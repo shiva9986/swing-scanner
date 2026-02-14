@@ -1,25 +1,17 @@
 import pandas as pd
 
-print("Reading Bhavcopy...")
-
-# Read CSV
+# Load bhavcopy
 df = pd.read_csv("data/bhavcopy.csv")
 
-# Clean column names (remove spaces)
+# Clean column names (remove spaces if any)
 df.columns = df.columns.str.strip()
 
-print("Columns Found:", df.columns.tolist())
-
-# Remove spaces in SERIES column
-df["SERIES"] = df["SERIES"].astype(str).str.strip()
-
-# Keep only EQ stocks
-df = df[df["SERIES"] == "EQ"]
-
-print("Stocks after EQ filter:", len(df))
-
-# Convert numeric columns safely
+# Convert required columns to numeric
 numeric_cols = [
+    "PREV_CLOSE",
+    "OPEN_PRICE",
+    "HIGH_PRICE",
+    "LOW_PRICE",
     "CLOSE_PRICE",
     "TTL_TRD_QNTY",
     "DELIV_PER"
@@ -28,16 +20,20 @@ numeric_cols = [
 for col in numeric_cols:
     df[col] = pd.to_numeric(df[col], errors="coerce")
 
-# Basic swing filter
-df = df[
-    (df["CLOSE_PRICE"] > 100) &
-    (df["TTL_TRD_QNTY"] > 500000) &
-    (df["DELIV_PER"] > 40)
+# Basic Swing Conditions
+df["PRICE_CHANGE_%"] = ((df["CLOSE_PRICE"] - df["PREV_CLOSE"]) / df["PREV_CLOSE"]) * 100
+
+filtered = df[
+    (df["PRICE_CHANGE_%"] > 1) & 
+    (df["DELIV_PER"] > 40) &
+    (df["TTL_TRD_QNTY"] > 50000)
 ]
 
-print("Stocks after swing filter:", len(df))
+# Sort by best movers
+filtered = filtered.sort_values(by="PRICE_CHANGE_%", ascending=False)
 
 # Save output
-df.to_excel("swing_output.xlsx", index=False)
+filtered.to_excel("swing_output.xlsx", index=False)
 
-print("Scanner completed successfully.")
+print("Scan completed successfully.")
+print("Stocks found:", len(filtered))
