@@ -1,15 +1,22 @@
 import pandas as pd
 
-# Load bhavcopy
+print("Reading Bhavcopy...")
+
+# Read CSV
 df = pd.read_csv("data/bhavcopy.csv")
 
-print("Columns found in file:")
-print(df.columns)
-
-print("\nTotal rows:", len(df))
-
-# Clean column names
+# Clean column names (remove spaces)
 df.columns = df.columns.str.strip()
+
+print("Columns Found:", df.columns.tolist())
+
+# Remove spaces in SERIES column
+df["SERIES"] = df["SERIES"].astype(str).str.strip()
+
+# Keep only EQ stocks
+df = df[df["SERIES"] == "EQ"]
+
+print("Stocks after EQ filter:", len(df))
 
 # Convert numeric columns safely
 numeric_cols = [
@@ -21,12 +28,16 @@ numeric_cols = [
 for col in numeric_cols:
     df[col] = pd.to_numeric(df[col], errors="coerce")
 
-# Basic filter (very simple test)
-result = df[df["SERIES"] == "EQ"]
+# Basic swing filter
+df = df[
+    (df["CLOSE_PRICE"] > 100) &
+    (df["TTL_TRD_QNTY"] > 500000) &
+    (df["DELIV_PER"] > 40)
+]
 
-print("EQ Stocks count:", len(result))
+print("Stocks after swing filter:", len(df))
 
 # Save output
-result.to_excel("swing_output.xlsx", index=False)
+df.to_excel("swing_output.xlsx", index=False)
 
-print("File created successfully!")
+print("Scanner completed successfully.")
