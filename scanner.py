@@ -1,28 +1,14 @@
 import pandas as pd
 
-# -----------------------------
-# LOAD BHAVCOPY
-# -----------------------------
+# Load bhavcopy exactly as NSE gives
 df = pd.read_csv("data/bhavcopy.csv")
 
-# Remove extra spaces from column names
+# Clean column names (remove spaces if any)
 df.columns = df.columns.str.strip()
 
-# Print columns for debugging (optional)
-print("Available Columns:", df.columns.tolist())
-
-# -----------------------------
-# FILTER ONLY EQ SERIES
-# -----------------------------
-df = df[df["SERIES"] == "EQ"]
-
-# -----------------------------
-# CONVERT REQUIRED COLUMNS TO NUMERIC
-# -----------------------------
+# Convert required numeric columns
 numeric_cols = [
     "CLOSE_PRICE",
-    "HIGH_PRICE",
-    "LOW_PRICE",
     "TTL_TRD_QNTY",
     "DELIV_PER"
 ]
@@ -30,30 +16,27 @@ numeric_cols = [
 for col in numeric_cols:
     df[col] = pd.to_numeric(df[col], errors="coerce")
 
-# -----------------------------
-# SIMPLE SWING CONDITIONS
-# -----------------------------
-df["Price_Up"] = df["CLOSE_PRICE"] > df["PREV_CLOSE"]
-df["High_Volume"] = df["TTL_TRD_QNTY"] > df["TTL_TRD_QNTY"].mean()
-df["Good_Delivery"] = df["DELIV_PER"] > 40
+# Remove BE series (only EQ stocks)
+df = df[df["SERIES"] == "EQ"]
 
-# Final selection
-swing_stocks = df[
-    df["Price_Up"] &
-    df["High_Volume"] &
-    df["Good_Delivery"]
+# Basic swing conditions (mild filter)
+filtered = df[
+    (df["TTL_TRD_QNTY"] > 100000) &
+    (df["DELIV_PER"] > 30)
 ]
 
-# -----------------------------
-# OUTPUT
-# -----------------------------
-output_cols = [
+# Select important columns
+result = filtered[[
     "SYMBOL",
     "CLOSE_PRICE",
     "TTL_TRD_QNTY",
     "DELIV_PER"
-]
+]]
 
-swing_stocks[output_cols].to_excel("swing_output.xlsx", index=False)
+# Sort by delivery %
+result = result.sort_values(by="DELIV_PER", ascending=False)
+
+# Save output
+result.to_excel("swing_output.xlsx", index=False)
 
 print("Scanner completed successfully.")
