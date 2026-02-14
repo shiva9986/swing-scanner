@@ -1,75 +1,78 @@
 import pandas as pd
-from datetime import datetime
+import os
 
-print("🚀 Starting NSE Swing Scanner...")
+# ===============================
+# CONFIGURATION
+# ===============================
 
-# ==========================
-# 1️⃣ Load Bhavcopy
-# ==========================
-try:
-    df = pd.read_csv("data/bhavcopy.csv")
-    print("✅ Bhavcopy Loaded Successfully")
-except Exception as e:
-    print("❌ Error loading bhavcopy:", e)
-    exit()
+DATA_PATH = "data/bhavcopy.csv"   # Your uploaded bhavcopy location
+OUTPUT_FILE = "swing_output.xlsx"
 
-# ==========================
-# 2️⃣ Clean Data
-# ==========================
-df.columns = df.columns.str.strip()
+# ===============================
+# LOAD DATA
+# ===============================
 
+print("Loading bhavcopy...")
+
+df = pd.read_csv(DATA_PATH)
+
+# Convert numeric columns safely
 numeric_cols = [
-    "OPEN_PRICE",
-    "HIGH_PRICE",
-    "LOW_PRICE",
-    "CLOSE_PRICE",
-    "TOTTRDQTY",
-    "DELIV_QTY",
-    "DELIV_PER"
+    "OPEN_PRICE", "HIGH_PRICE", "LOW_PRICE",
+    "CLOSE_PRICE", "PREV_CLOSE",
+    "TOTTRDQTY", "DELIV_PER"
 ]
 
 for col in numeric_cols:
-    df[col] = pd.to_numeric(df[col], errors="coerce")
+    if col in df.columns:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
 
 df = df.dropna()
 
-# ==========================
-# 3️⃣ Professional Filters
-# ==========================
+# ===============================
+# BASIC PROFESSIONAL FILTERS
+# ===============================
 
-# High Volume (Above 20-day type logic approximation)
-volume_filter = df["TOTTRDQTY"] > df["TOTTRDQTY"].mean()
+print("Applying filters...")
 
-# Strong Delivery
-delivery_filter = df["DELIV_PER"] > 40
-
-# Price Above 100
+# 1️⃣ Price above 100
 price_filter = df["CLOSE_PRICE"] > 100
 
-# Bullish Candle
-candle_filter = df["CLOSE_PRICE"] > df["OPEN_PRICE"]
+# 2️⃣ Volume above 20-day average (temporary proxy using mean)
+volume_filter = df["TOTTRDQTY"] > df["TOTTRDQTY"].mean()
 
-# Combine
-scanner = df[
+# 3️⃣ Strong delivery
+delivery_filter = df["DELIV_PER"] > 40
+
+# 4️⃣ Strong candle (Close > Prev Close)
+momentum_filter = df["CLOSE_PRICE"] > df["PREV_CLOSE"]
+
+# Combine filters
+filtered = df[
+    price_filter &
     volume_filter &
     delivery_filter &
-    price_filter &
-    candle_filter
+    momentum_filter
 ]
 
-# ==========================
-# 4️⃣ Sort By Delivery %
-# ==========================
-scanner = scanner.sort_values(by="DELIV_PER", ascending=False)
+# ===============================
+# ADD SCORE SYSTEM (Professional Edge)
+# ===============================
 
-# ==========================
-# 5️⃣ Save Output
-# ==========================
-today = datetime.now().strftime("%d-%m-%Y")
-output_file = f"output_swing_{today}.csv"
+filtered["Score"] = (
+    (filtered["CLOSE_PRICE"] > filtered["OPEN_PRICE"]).astype(int) +
+    (filtered["DELIV_PER"] > 50).astype(int) +
+    (filtered["TOTTRDQTY"] > filtered["TOTTRDQTY"].mean()).astype(int)
+)
 
-scanner.to_csv(output_file, index=False)
+filtered = filtered.sort_values(by="Score", ascending=False)
 
-print("🎯 Scanner Completed")
-print("📊 Stocks Found:", len(scanner))
-print("📁 Output File Created:", output_file)
+# ===============================
+# SAVE OUTPUT
+# ===============================
+
+print("Saving results...")
+
+filtered.to_excel(OUTPUT_FILE, index=False)
+
+print("Done. File saved as:", OUTPUT_FILE)
