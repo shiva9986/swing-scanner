@@ -1,12 +1,17 @@
 import pandas as pd
 
-# Load bhavcopy exactly as NSE gives
+# Load bhavcopy
 df = pd.read_csv("data/bhavcopy.csv")
 
-# Clean column names (remove spaces if any)
+print("Columns found in file:")
+print(df.columns)
+
+print("\nTotal rows:", len(df))
+
+# Clean column names
 df.columns = df.columns.str.strip()
 
-# Convert required numeric columns
+# Convert numeric columns safely
 numeric_cols = [
     "CLOSE_PRICE",
     "TTL_TRD_QNTY",
@@ -16,27 +21,12 @@ numeric_cols = [
 for col in numeric_cols:
     df[col] = pd.to_numeric(df[col], errors="coerce")
 
-# Remove BE series (only EQ stocks)
-df = df[df["SERIES"] == "EQ"]
+# Basic filter (very simple test)
+result = df[df["SERIES"] == "EQ"]
 
-# Basic swing conditions (mild filter)
-filtered = df[
-    (df["TTL_TRD_QNTY"] > 100000) &
-    (df["DELIV_PER"] > 30)
-]
-
-# Select important columns
-result = filtered[[
-    "SYMBOL",
-    "CLOSE_PRICE",
-    "TTL_TRD_QNTY",
-    "DELIV_PER"
-]]
-
-# Sort by delivery %
-result = result.sort_values(by="DELIV_PER", ascending=False)
+print("EQ Stocks count:", len(result))
 
 # Save output
 result.to_excel("swing_output.xlsx", index=False)
 
-print("Scanner completed successfully.")
+print("File created successfully!")
