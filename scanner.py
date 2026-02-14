@@ -1,67 +1,36 @@
 import pandas as pd
 
-print("Loading bhavcopy...")
-
-# Read bhavcopy
+# Load bhavcopy
 df = pd.read_csv("data/bhavcopy.csv")
 
-# Clean column names
-df.columns = df.columns.str.strip()
-
-# Keep only EQ series
-df["SERIES"] = df["SERIES"].astype(str).str.strip()
+# Filter only EQ series
 df = df[df["SERIES"] == "EQ"]
 
-# Convert numeric columns
-numeric_cols = [
-    "PREV_CLOSE",
-    "OPEN_PRICE",
-    "HIGH_PRICE",
-    "LOW_PRICE",
-    "CLOSE_PRICE",
-    "TTL_TRD_QNTY",
-    "DELIV_PER"
-]
-
-for col in numeric_cols:
+# Convert required columns to numeric
+cols = ["CLOSE_PRICE", "DELIV_PER", "TTL_TRD_QNTY"]
+for col in cols:
     df[col] = pd.to_numeric(df[col], errors="coerce")
+
+# Remove rows with missing data
+df = df.dropna(subset=cols)
 
 # Calculate % change
 df["PCT_CHANGE"] = ((df["CLOSE_PRICE"] - df["PREV_CLOSE"]) / df["PREV_CLOSE"]) * 100
 
-# Create Strength Score
+# Scoring system
 df["SCORE"] = (
-    (df["PCT_CHANGE"] * 2) +                 # Momentum weight
-    (df["DELIV_PER"] * 0.5) +                # Delivery weight
-    (df["TTL_TRD_QNTY"] / df["TTL_TRD_QNTY"].max()) * 10  # Volume normalization
+    df["PCT_CHANGE"] * 2 +
+    df["DELIV_PER"] * 0.3 +
+    (df["TTL_TRD_QNTY"] / 100000)
 )
 
-# Basic quality filter
-filtered = df[
-    (df["PCT_CHANGE"] > 0.5) &
-    (df["DELIV_PER"] > 35)
-]
+# Sort by score
+df = df.sort_values("SCORE", ascending=False)
 
-# Sort by SCORE
-filtered = filtered.sort_values(by="SCORE", ascending=False)
-
-# Take Top 30
-top30 = filtered.head(30)
-
-# Select important columns
-output_cols = [
-    "SYMBOL",
-    "CLOSE_PRICE",
-    "PCT_CHANGE",
-    "DELIV_PER",
-    "TTL_TRD_QNTY",
-    "SCORE"
-]
-
-top30 = top30[output_cols]
+# Take Top 10 only
+top10 = df[["SYMBOL", "CLOSE_PRICE", "PCT_CHANGE", "DELIV_PER", "TTL_TRD_QNTY", "SCORE"]].head(10)
 
 # Save output
-top30.to_excel("swing_output.xlsx", index=False)
+top10.to_excel("swing_output.xlsx", index=False)
 
-print("Top 30 Professional Swing List Created.")
-print("Stocks found:", len(top30))
+print("Top 10 stocks generated successfully.")
