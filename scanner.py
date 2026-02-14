@@ -6,8 +6,11 @@ df = pd.read_csv("data/bhavcopy.csv")
 # Keep only EQ series
 df = df[df["SERIES"] == "EQ"]
 
-# Convert numeric columns
+# Convert numeric columns safely
 numeric_cols = [
+    "OPEN_PRICE",
+    "HIGH_PRICE",
+    "LOW_PRICE",
     "CLOSE_PRICE",
     "TTL_TRD_QNTY",
     "DELIV_PER"
@@ -16,23 +19,23 @@ numeric_cols = [
 for col in numeric_cols:
     df[col] = pd.to_numeric(df[col], errors="coerce")
 
-# Filters
-price_filter = df["CLOSE_PRICE"] > 100
-volume_filter = df["TTL_TRD_QNTY"] > df["TTL_TRD_QNTY"].mean()
-delivery_filter = df["DELIV_PER"] > 40
+# Basic swing condition:
+# 1. Close near day high
+# 2. Good volume
+# 3. Good delivery %
 
-# Apply filters
-scanner = df[price_filter & volume_filter & delivery_filter]
+df["Close_vs_High"] = df["CLOSE_PRICE"] / df["HIGH_PRICE"]
 
-# Select output columns
-output = scanner[[
-    "SYMBOL",
-    "CLOSE_PRICE",
-    "TTL_TRD_QNTY",
-    "DELIV_PER"
-]]
+swing_df = df[
+    (df["Close_vs_High"] > 0.98) &
+    (df["TTL_TRD_QNTY"] > 200000) &
+    (df["DELIV_PER"] > 40)
+]
+
+# Sort by volume
+swing_df = swing_df.sort_values("TTL_TRD_QNTY", ascending=False)
 
 # Save output
-output.to_excel("swing_output.xlsx", index=False)
+swing_df.to_excel("swing_output.xlsx", index=False)
 
-print("Scanner completed successfully.")
+print("Scanner completed successfully")
