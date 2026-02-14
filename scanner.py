@@ -1,13 +1,16 @@
 import pandas as pd
 
-# Load bhavcopy
-df = pd.read_csv("data/bhavcopy.csv")
+# Load bhavcopy (auto detect separator)
+df = pd.read_csv("data/bhavcopy.csv", sep=None, engine="python")
+
+# Clean column names (remove spaces)
+df.columns = df.columns.str.strip()
 
 # Filter only EQ series
 df = df[df["SERIES"] == "EQ"]
 
 # Convert required columns to numeric
-cols = ["CLOSE_PRICE", "DELIV_PER", "TTL_TRD_QNTY"]
+cols = ["CLOSE_PRICE", "DELIV_PER", "TTL_TRD_QNTY", "PREV_CLOSE"]
 for col in cols:
     df[col] = pd.to_numeric(df[col], errors="coerce")
 
