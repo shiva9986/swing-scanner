@@ -1,33 +1,29 @@
-name: Daily NSE Swing Scanner
+import pandas as pd
 
-on:
-  schedule:
-    - cron: '0 13 * * 1-5'
-  workflow_dispatch:
+# Load bhavcopy
+df = pd.read_csv("data/bhavcopy.csv")
 
-jobs:
-  run-scanner:
-    runs-on: ubuntu-latest
+# Convert numeric columns
+numeric_cols = [
+    "CLOSE_PRICE",
+    "TTL_TRD_QNTY",
+    "DELIV_PER"
+]
 
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v3
+for col in numeric_cols:
+    df[col] = pd.to_numeric(df[col], errors="coerce")
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
+# Filters
+price_filter = df["CLOSE_PRICE"] > 100
+volume_filter = df["TTL_TRD_QNTY"] > df["TTL_TRD_QNTY"].mean()
+delivery_filter = df["DELIV_PER"] > 40
 
-      - name: Install Dependencies
-        run: |
-          pip install pandas openpyxl
+scanner = df[price_filter & volume_filter & delivery_filter]
 
-      - name: Run Scanner
-        run: |
-          python scanner.py
+# Sort by volume
+scanner = scanner.sort_values(by="TTL_TRD_QNTY", ascending=False)
 
-      - name: Upload Output File
-        uses: actions/upload-artifact@v3
-        with:
-          name: swing-output
-          path: swing_output.xlsx
+# Save output
+scanner.to_excel("swing_output.xlsx", index=False)
+
+print("Scanner Completed Successfully ✅")
