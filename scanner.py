@@ -1,38 +1,38 @@
 import pandas as pd
 
-print("Loading bhavcopy...")
-
-# Load file
+# Load bhavcopy
 df = pd.read_csv("data/bhavcopy.csv")
 
-print("Columns found:", df.columns.tolist())
+# Keep only EQ series
+df = df[df["SERIES"] == "EQ"]
 
-# Convert required numeric columns
+# Convert numeric columns
 numeric_cols = [
     "CLOSE_PRICE",
     "TTL_TRD_QNTY",
-    "DELIV_PER",
-    "HIGH_PRICE"
+    "DELIV_PER"
 ]
 
 for col in numeric_cols:
     df[col] = pd.to_numeric(df[col], errors="coerce")
 
-# Remove rows with missing values
-df = df.dropna(subset=numeric_cols)
+# Filters
+price_filter = df["CLOSE_PRICE"] > 100
+volume_filter = df["TTL_TRD_QNTY"] > df["TTL_TRD_QNTY"].mean()
+delivery_filter = df["DELIV_PER"] > 40
 
-print("Total stocks:", len(df))
+# Apply filters
+scanner = df[price_filter & volume_filter & delivery_filter]
 
-# === SIMPLE SWING LOGIC ===
-filtered = df[
-    (df["CLOSE_PRICE"] > 100) &
-    (df["TTL_TRD_QNTY"] > 500000) &
-    (df["DELIV_PER"] > 50)
-]
-
-print("Filtered stocks:", len(filtered))
+# Select output columns
+output = scanner[[
+    "SYMBOL",
+    "CLOSE_PRICE",
+    "TTL_TRD_QNTY",
+    "DELIV_PER"
+]]
 
 # Save output
-filtered.to_excel("swing_output.xlsx", index=False)
+output.to_excel("swing_output.xlsx", index=False)
 
-print("Scanner completed successfully ✅")
+print("Scanner completed successfully.")
