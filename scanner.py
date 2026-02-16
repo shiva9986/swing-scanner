@@ -3,7 +3,7 @@ import pandas as pd
 # -----------------------------
 # 1. Load Bhavcopy
 # -----------------------------
-df = pd.read_csv("bhavcopy.csv")   # make sure file name matches exactly
+df = pd.read_csv("data/bhavcopy.csv")   # make sure file name matches exactly
 
 # -----------------------------
 # 2. Filter Only EQ Series
