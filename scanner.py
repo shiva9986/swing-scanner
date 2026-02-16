@@ -1,52 +1,90 @@
 import pandas as pd
 
-# Load bhavcopy safely
-df = pd.read_csv("data/bhavcopy.csv", low_memory=False)
+# -----------------------------
+# 1. Load Bhavcopy
+# -----------------------------
+df = pd.read_csv("bhavcopy.csv")   # make sure file name matches exactly
 
-# Remove extra spaces from column names
-df.columns = df.columns.str.strip()
+# -----------------------------
+# 2. Filter Only EQ Series
+# -----------------------------
+if "SERIES" in df.columns:
+    df = df[df["SERIES"] == "EQ"]
 
-print("Columns Found:", df.columns.tolist())
+# -----------------------------
+# 3. Convert Required Columns
+# -----------------------------
+numeric_cols = [
+    "PREV_CLOSE",
+    "CLOSE_PRICE",
+    "DELIV_PER",
+    "TTL_TRD_QNTY"
+]
 
-# Filter only EQ series
-df = df[df["SERIES"].str.strip() == "EQ"]
+for col in numeric_cols:
+    if col in df.columns:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
 
-# Convert required columns safely
-cols = ["CLOSE_PRICE", "PREV_CLOSE", "DELIV_PER", "TTL_TRD_QNTY"]
+df = df.dropna(subset=numeric_cols)
 
-for col in cols:
-    df[col] = pd.to_numeric(df[col], errors="coerce")
-
-# Remove rows with missing data
-df = df.dropna(subset=cols)
-
-# Calculate % change
+# -----------------------------
+# 4. Calculate % Change
+# -----------------------------
 df["PCT_CHANGE"] = (
     (df["CLOSE_PRICE"] - df["PREV_CLOSE"]) 
     / df["PREV_CLOSE"]
 ) * 100
 
-# Create Score
-df["SCORE"] = (
+# -----------------------------
+# 5. MOMENTUM SCORE
+# Price Strength + Volume
+# -----------------------------
+df["MOMENTUM_SCORE"] = (
     df["PCT_CHANGE"] * 2 +
-    df["DELIV_PER"] * 0.3 +
     (df["TTL_TRD_QNTY"] / 1000000)
 )
 
-# Sort
-df = df.sort_values("SCORE", ascending=False)
+# -----------------------------
+# 6. ACCUMULATION SCORE
+# Delivery + Volume Stability
+# -----------------------------
+df["ACCUMULATION_SCORE"] = (
+    df["DELIV_PER"] * 0.5 +
+    (df["TTL_TRD_QNTY"] / 2000000)
+)
 
-# Take Top 10
-top10 = df[[
-    "SYMBOL",
-    "CLOSE_PRICE",
-    "PCT_CHANGE",
-    "DELIV_PER",
-    "TTL_TRD_QNTY",
-    "SCORE"
-]].head(10)
+# -----------------------------
+# 7. FINAL COMBINED SCORE
+# -----------------------------
+df["FINAL_SCORE"] = (
+    df["MOMENTUM_SCORE"] * 0.6 +
+    df["ACCUMULATION_SCORE"] * 0.4
+)
 
-# Save
-top10.to_excel("swing_output.xlsx", index=False)
+# -----------------------------
+# 8. Sort & Select Top 10
+# -----------------------------
+top10 = df.sort_values("FINAL_SCORE", ascending=False).head(10)
 
-print("Top 10 stocks generated successfully.")
+# -----------------------------
+# 9. Select Output Columns
+# -----------------------------
+output = top10[
+    [
+        "SYMBOL",
+        "CLOSE_PRICE",
+        "PCT_CHANGE",
+        "DELIV_PER",
+        "TTL_TRD_QNTY",
+        "MOMENTUM_SCORE",
+        "ACCUMULATION_SCORE",
+        "FINAL_SCORE"
+    ]
+]
+
+# -----------------------------
+# 10. Save Output
+# -----------------------------
+output.to_excel("swing_output.xlsx", index=False)
+
+print("Top 10 Stocks Generated Successfully ✅")
