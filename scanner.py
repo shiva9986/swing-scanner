@@ -1,7 +1,7 @@
 import pandas as pd
 
 # Load bhavcopy
-df = pd.read_csv("bhavcopy.csv")
+df = pd.read_csv("data/bhavcopy.csv")
 
 # Filter EQ series
 df = df[df["SERIES"] == "EQ"]
