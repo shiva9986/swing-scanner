@@ -1,98 +1,84 @@
 import pandas as pd
-import numpy as np
 
-# ==============================
-# 1. LOAD BHAVCOPY
-# ==============================
+print("Loading Bhavcopy...")
 
+# Load file
 df = pd.read_csv("data/bhavcopy.csv")
 
-print("Rows Loaded:", len(df))
+print("Rows loaded:", len(df))
+print("Columns found:", df.columns.tolist())
 
-# Clean column names (important)
+# Clean column names
 df.columns = df.columns.str.strip().str.upper()
 
-# Keep only EQ series if column exists
-if "SERIES" in df.columns:
-    df = df[df["SERIES"] == "EQ"]
-
-# ==============================
-# 2. SAFE COLUMN HANDLING
-# ==============================
-
-# Rename common bhavcopy columns safely
-column_map = {
-    "SYMBOL": "SYMBOL",
-    "CLOSE_PRICE": "CLOSE",
-    "CLOSE": "CLOSE",
-    "PREV_CLOSE": "PREV_CLOSE",
-    "TTL_TRD_QNTY": "VOLUME",
-    "DELIV_PER": "DELIV_PER"
-}
-
-df = df.rename(columns=column_map)
-
-required_cols = ["SYMBOL", "CLOSE", "PREV_CLOSE", "VOLUME"]
+# Ensure required columns exist
+required_cols = ["SYMBOL", "SERIES", "CLOSE_PRICE", "PREV_CLOSE", "TTL_TRD_QNTY", "DELIV_PER"]
 
 for col in required_cols:
     if col not in df.columns:
-        print(f"Missing Column: {col}")
+        print(f"Missing column: {col}")
         exit()
 
-# Convert numeric safely
-for col in ["CLOSE", "PREV_CLOSE", "VOLUME"]:
-    df[col] = pd.to_numeric(df[col], errors="coerce")
+# Filter only EQ series safely
+df = df[df["SERIES"] == "EQ"].copy()
 
-# ==============================
-# 3. CALCULATE PERCENT CHANGE
-# ==============================
+print("EQ Rows:", len(df))
 
-df["PCT_CHANGE"] = ((df["CLOSE"] - df["PREV_CLOSE"]) / df["PREV_CLOSE"]) * 100
+if len(df) == 0:
+    print("No EQ stocks found. Exiting.")
+    exit()
 
-# ==============================
-# 4. MOMENTUM SCORE
-# ==============================
+# Convert numeric columns
+df["CLOSE_PRICE"] = pd.to_numeric(df["CLOSE_PRICE"], errors="coerce")
+df["PREV_CLOSE"] = pd.to_numeric(df["PREV_CLOSE"], errors="coerce")
+df["TTL_TRD_QNTY"] = pd.to_numeric(df["TTL_TRD_QNTY"], errors="coerce")
+df["DELIV_PER"] = pd.to_numeric(df["DELIV_PER"], errors="coerce")
 
+# Calculate Percent Change
+df["PCT_CHANGE"] = ((df["CLOSE_PRICE"] - df["PREV_CLOSE"]) / df["PREV_CLOSE"]) * 100
+
+# Drop invalid rows
+df = df.dropna(subset=["PCT_CHANGE", "TTL_TRD_QNTY", "DELIV_PER"])
+
+print("Valid rows after cleaning:", len(df))
+
+if len(df) == 0:
+    print("No valid data after cleaning. Exiting.")
+    exit()
+
+# --- SCORING ---
+
+# Momentum Score
 df["MOMENTUM_SCORE"] = (
-    (df["PCT_CHANGE"].clip(lower=0) * 10) +
-    (np.log1p(df["VOLUME"]) * 2)
+    df["PCT_CHANGE"] * 0.6 +
+    (df["TTL_TRD_QNTY"] / df["TTL_TRD_QNTY"].max()) * 100 * 0.4
 )
 
-# ==============================
-# 5. ACCUMULATION SCORE
-# ==============================
+# Accumulation Score
+df["ACCUMULATION_SCORE"] = (
+    df["DELIV_PER"] * 0.7 +
+    (df["TTL_TRD_QNTY"] / df["TTL_TRD_QNTY"].max()) * 100 * 0.3
+)
 
-if "DELIV_PER" in df.columns:
-    df["DELIV_PER"] = pd.to_numeric(df["DELIV_PER"], errors="coerce")
-    df["ACCUMULATION_SCORE"] = (
-        df["DELIV_PER"].fillna(0) * 5 +
-        (np.log1p(df["VOLUME"]) * 1.5)
-    )
-else:
-    df["ACCUMULATION_SCORE"] = np.log1p(df["VOLUME"]) * 1.5
-
-# ==============================
-# 6. FINAL SCORE
-# ==============================
-
+# Final Score
 df["FINAL_SCORE"] = df["MOMENTUM_SCORE"] + df["ACCUMULATION_SCORE"]
 
-# ==============================
-# 7. SORT & OUTPUT
-# ==============================
-
+# Sort
 df = df.sort_values("FINAL_SCORE", ascending=False)
 
-output_columns = [
+# Select top 50
+output = df[[
     "SYMBOL",
-    "CLOSE",
+    "CLOSE_PRICE",
     "PCT_CHANGE",
-    "VOLUME",
+    "DELIV_PER",
+    "TTL_TRD_QNTY",
     "MOMENTUM_SCORE",
     "ACCUMULATION_SCORE",
     "FINAL_SCORE"
-]
+]].head(50)
 
-df[output_columns].to_excel("swing_output.xlsx", index=False)
+# Save output
+output.to_excel("swing_output.xlsx", index=False)
 
-print("Scanner Completed Successfully")
+print("Scanner completed successfully!")
