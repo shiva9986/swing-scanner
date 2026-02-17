@@ -1,56 +1,97 @@
 import pandas as pd
-import os
+import numpy as np
 
-print("Current working directory:", os.getcwd())
-
-# ---------- LOAD BHAVCOPY ----------
+# ===============================
+# LOAD BHAVCOPY
+# ===============================
 df = pd.read_csv("data/bhavcopy.csv")
 
 print("Rows Loaded:", len(df))
 
-# ---------- CLEAN COLUMN NAMES ----------
-df.columns = df.columns.str.strip().str.upper()
+# Keep only EQ series
+df = df[df["SERIES"] == "EQ"]
 
-# ---------- ENSURE REQUIRED COLUMNS ----------
-required_cols = ["SYMBOL", "CLOSE", "PCT_CHANGE", "DELIV_PER", "TTL_TRD_QNTY"]
+# ===============================
+# SAFE COLUMN HANDLING
+# ===============================
+df.columns = df.columns.str.strip()
 
-for col in required_cols:
-    if col not in df.columns:
-        print(f"Missing column: {col}")
-        exit()
+# Convert required columns safely
+numeric_cols = [
+    "CLOSE_PRICE",
+    "PREV_CLOSE",
+    "TTL_TRD_QNTY",
+    "DELIV_PER"
+]
 
-# ---------- CONVERT TO NUMERIC ----------
-df["PCT_CHANGE"] = pd.to_numeric(df["PCT_CHANGE"], errors="coerce")
-df["DELIV_PER"] = pd.to_numeric(df["DELIV_PER"], errors="coerce")
-df["TTL_TRD_QNTY"] = pd.to_numeric(df["TTL_TRD_QNTY"], errors="coerce")
+for col in numeric_cols:
+    if col in df.columns:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+    else:
+        print(f"Column missing: {col}")
 
-df = df.dropna()
+# ===============================
+# CALCULATIONS
+# ===============================
 
-# ---------- MOMENTUM SCORE ----------
+# % Change
+df["PCT_CHANGE"] = (
+    (df["CLOSE_PRICE"] - df["PREV_CLOSE"]) /
+    df["PREV_CLOSE"]
+) * 100
+
+# Volume Score (normalized)
+df["VOL_SCORE"] = (
+    df["TTL_TRD_QNTY"] /
+    df["TTL_TRD_QNTY"].max()
+) * 100
+
+# ===============================
+# MOMENTUM SCORE
+# ===============================
 df["MOMENTUM_SCORE"] = (
-    df["PCT_CHANGE"] * 100 +
-    df["TTL_TRD_QNTY"] / 100000
+    (df["PCT_CHANGE"] * 0.6) +
+    (df["VOL_SCORE"] * 0.4)
 )
 
-# ---------- ACCUMULATION SCORE ----------
+# ===============================
+# ACCUMULATION SCORE
+# ===============================
 df["ACCUMULATION_SCORE"] = (
-    df["DELIV_PER"] * 10 +
-    df["TTL_TRD_QNTY"] / 200000
+    (df["DELIV_PER"] * 0.7) +
+    (df["VOL_SCORE"] * 0.3)
 )
 
-# ---------- FINAL SCORE ----------
-df["FINAL_SCORE"] = df["MOMENTUM_SCORE"] + df["ACCUMULATION_SCORE"]
+# ===============================
+# FINAL SCORE
+# ===============================
+df["FINAL_SCORE"] = (
+    df["MOMENTUM_SCORE"] * 0.6 +
+    df["ACCUMULATION_SCORE"] * 0.4
+)
 
-# ---------- SORT ----------
+# ===============================
+# SORT
+# ===============================
 df = df.sort_values("FINAL_SCORE", ascending=False)
 
-# ---------- KEEP TOP 20 ----------
-df = df.head(20)
+# ===============================
+# SELECT OUTPUT COLUMNS
+# ===============================
+output = df[[
+    "SYMBOL",
+    "CLOSE_PRICE",
+    "PCT_CHANGE",
+    "DELIV_PER",
+    "TTL_TRD_QNTY",
+    "MOMENTUM_SCORE",
+    "ACCUMULATION_SCORE",
+    "FINAL_SCORE"
+]]
 
-# ---------- SAVE OUTPUT ----------
-output_path = os.path.join(os.getcwd(), "swing_output.xlsx")
+# ===============================
+# SAVE OUTPUT
+# ===============================
+output.to_excel("swing_output.xlsx", index=False)
 
-df.to_excel(output_path, index=False)
-
-print("File saved at:", output_path)
-print("Done Successfully.")
+print("Scanner Completed Successfully ✅")
