@@ -1,57 +1,62 @@
 import pandas as pd
 
-# Load file
+# Load bhavcopy from GitHub data folder
 df = pd.read_csv("data/bhavcopy.csv")
 
-print("Rows loaded:", len(df))
+print("Rows Loaded:", len(df))
 
-# Clean column names
-df.columns = df.columns.str.strip()
+# Keep only EQ series
+df = df[df["SERIES"] == "EQ"].copy()
 
-# Clean SERIES column
-df["SERIES"] = df["SERIES"].astype(str).str.strip()
-
-# Filter EQ only
-df = df[df["SERIES"] == "EQ"]
-
-print("EQ Rows:", len(df))
-
-# Convert numeric columns safely
+# Convert required columns to numeric
 numeric_cols = [
+    "PREV_CLOSE",
     "CLOSE_PRICE",
-    "PCT_CHANGE",
-    "DELIV_PER",
-    "TTL_TRD_QNTY"
+    "TTL_TRD_QNTY",
+    "DELIV_PER"
 ]
 
 for col in numeric_cols:
     df[col] = pd.to_numeric(df[col], errors="coerce")
 
-# Drop rows with missing important values
 df = df.dropna(subset=numeric_cols)
 
-# Momentum Score
+# =========================
+# CALCULATE PERCENT CHANGE
+# =========================
+df["PCT_CHANGE"] = (
+    (df["CLOSE_PRICE"] - df["PREV_CLOSE"]) 
+    / df["PREV_CLOSE"]
+) * 100
+
+# =========================
+# MOMENTUM SCORE
+# =========================
 df["MOMENTUM_SCORE"] = (
-    df["PCT_CHANGE"] * 100 +
-    df["TTL_TRD_QNTY"] / 100000
+    df["PCT_CHANGE"] * 50 +
+    (df["TTL_TRD_QNTY"] / df["TTL_TRD_QNTY"].max()) * 50
 )
 
-# Accumulation Score
+# =========================
+# ACCUMULATION SCORE
+# =========================
 df["ACCUMULATION_SCORE"] = (
-    df["DELIV_PER"] * 50 +
-    df["TTL_TRD_QNTY"] / 200000
+    df["DELIV_PER"] * 0.7 +
+    (df["TTL_TRD_QNTY"] / df["TTL_TRD_QNTY"].max()) * 30
 )
 
-# Final Score
+# =========================
+# FINAL SCORE
+# =========================
 df["FINAL_SCORE"] = (
     df["MOMENTUM_SCORE"] * 0.6 +
     df["ACCUMULATION_SCORE"] * 0.4
 )
 
-# Sort
+# Sort by final score
 df = df.sort_values("FINAL_SCORE", ascending=False)
 
-# Select columns
+# Select output columns
 output = df[[
     "SYMBOL",
     "CLOSE_PRICE",
@@ -61,9 +66,9 @@ output = df[[
     "MOMENTUM_SCORE",
     "ACCUMULATION_SCORE",
     "FINAL_SCORE"
-]]
+]].head(20)
 
-# Save
+# Save Excel properly
 output.to_excel("swing_output.xlsx", index=False)
 
-print("File generated successfully!")
+print("Scanner Completed Successfully")
