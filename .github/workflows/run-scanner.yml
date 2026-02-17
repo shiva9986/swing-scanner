@@ -27,7 +27,7 @@ jobs:
           python scanner.py
 
       - name: Upload Output File
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: swing-output
           path: swing_output.xlsx
