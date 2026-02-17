@@ -1,116 +1,68 @@
 import pandas as pd
-import numpy as np
-import os
 
-print("Starting Scanner...")
+# ===============================
+# LOAD BHAVCOPY
+# ===============================
 
-# -----------------------------
-# Load File
-# -----------------------------
-file_path = "data/bhavcopy.csv"
+df = pd.read_csv("data/bhavcopy.csv")
 
-if not os.path.exists(file_path):
-    print("Bhavcopy file not found!")
-    exit()
+print("Rows loaded:", len(df))
+print("Columns found:", df.columns.tolist())
 
-df = pd.read_csv(file_path)
+# ===============================
+# CLEAN COLUMN NAMES
+# ===============================
 
-print("Rows Loaded:", len(df))
-
-# -----------------------------
-# Clean Column Names
-# -----------------------------
 df.columns = df.columns.str.strip().str.upper()
 
-print("Columns Found:", df.columns.tolist())
+# Keep only EQ series
+df = df[df["SERIES"] == "EQ"]
 
-# -----------------------------
-# Filter Only EQ (if available)
-# -----------------------------
-if "SERIES" in df.columns:
-    df = df[df["SERIES"].astype(str).str.upper() == "EQ"]
-    print("EQ Rows:", len(df))
-else:
-    print("SERIES column not found — skipping filter")
+# ===============================
+# NUMERIC CONVERSION
+# ===============================
 
-# -----------------------------
-# Required Columns Mapping
-# -----------------------------
-required_cols = {
-    "SYMBOL": "SYMBOL",
-    "CLOSE": "CLOSE_PRICE",
-    "LAST": "LAST_PRICE",
-    "PCT": "PCT_CHANGE",
-    "DELIV": "DELIV_PER",
-    "VOLUME": "TTL_TRD_QNTY"
-}
+numeric_cols = [
+    "CLOSE_PRICE",
+    "PREV_CLOSE",
+    "TTL_TRD_QNTY",
+    "DELIV_PER"
+]
 
-# Try auto-detect close price
-if "CLOSE_PRICE" in df.columns:
-    close_col = "CLOSE_PRICE"
-elif "LAST_PRICE" in df.columns:
-    close_col = "LAST_PRICE"
-else:
-    print("No Close price column found")
-    exit()
+for col in numeric_cols:
+    df[col] = pd.to_numeric(df[col], errors="coerce")
 
-# Auto detect percentage change
-pct_col = None
-for col in df.columns:
-    if "PCT" in col:
-        pct_col = col
-        break
+# ===============================
+# CALCULATIONS
+# ===============================
 
-# Auto detect volume
-vol_col = None
-for col in df.columns:
-    if "QNTY" in col or "VOLUME" in col:
-        vol_col = col
-        break
+df["PCT_CHANGE"] = ((df["CLOSE_PRICE"] - df["PREV_CLOSE"]) / df["PREV_CLOSE"]) * 100
 
-# Auto detect delivery
-deliv_col = None
-for col in df.columns:
-    if "DELIV" in col:
-        deliv_col = col
-        break
+# Momentum Score
+df["MOMENTUM_SCORE"] = (
+    df["PCT_CHANGE"] * 2 +
+    (df["TTL_TRD_QNTY"] / df["TTL_TRD_QNTY"].max()) * 100
+)
 
-print("Using Columns:")
-print("Close:", close_col)
-print("Pct:", pct_col)
-print("Volume:", vol_col)
-print("Delivery:", deliv_col)
+# Accumulation Score
+df["ACCUMULATION_SCORE"] = (
+    df["DELIV_PER"] * 1.5 +
+    (df["TTL_TRD_QNTY"] / df["TTL_TRD_QNTY"].max()) * 50
+)
 
-# -----------------------------
-# Convert Numeric
-# -----------------------------
-for col in [close_col, pct_col, vol_col, deliv_col]:
-    if col:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
-
-# -----------------------------
-# Create Scores
-# -----------------------------
-df["MOMENTUM_SCORE"] = 0
-df["ACCUMULATION_SCORE"] = 0
-
-if pct_col:
-    df["MOMENTUM_SCORE"] = df[pct_col].fillna(0) * 100
-
-if vol_col and deliv_col:
-    df["ACCUMULATION_SCORE"] = (
-        df[vol_col].fillna(0) * df[deliv_col].fillna(0)
-    ) / 1000000
-
+# Final Score
 df["FINAL_SCORE"] = df["MOMENTUM_SCORE"] + df["ACCUMULATION_SCORE"]
 
-# -----------------------------
-# Sort & Export
-# -----------------------------
+# ===============================
+# SORT
+# ===============================
+
 df = df.sort_values("FINAL_SCORE", ascending=False)
 
-output_file = "swing_output.csv"
-df.to_csv(output_file, index=False)
+# ===============================
+# SAVE OUTPUT (IMPORTANT)
+# ===============================
 
-print("Scanner Completed Successfully")
-print("Output Saved:", output_file)
+df.to_excel("swing_output.xlsx", index=False)
+
+print("File saved successfully as swing_output.xlsx")
