@@ -1,79 +1,63 @@
 import pandas as pd
+import os
 
-# -------------------------------
-# 1️⃣ LOAD BHAVCOPY
-# -------------------------------
+# =========================
+# READ FILE
+# =========================
 
-df = pd.read_csv("data/bhavcopy.csv")
+file_path = "data/bhavcopy.csv"
 
-# Standardize column names (remove spaces)
+if not os.path.exists(file_path):
+    raise FileNotFoundError("bhavcopy.csv not found inside data folder")
+
+df = pd.read_csv(file_path)
+
+# Clean column names
 df.columns = df.columns.str.strip()
 
-# Keep only EQ series
+# Keep only EQ series if SERIES column exists
 if "SERIES" in df.columns:
     df = df[df["SERIES"] == "EQ"]
 
-# -------------------------------
-# 2️⃣ CONVERT REQUIRED COLUMNS
-# -------------------------------
+# Remove missing values
+df = df.dropna()
 
-numeric_cols = [
-    "CLOSE_PRICE",
-    "PREV_CLOSE",
-    "DELIV_PER",
-    "TTL_TRD_QNTY"
-]
+# =========================
+# BASIC CALCULATIONS
+# =========================
 
-for col in numeric_cols:
-    if col in df.columns:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
+# % Change
+df["PCT_CHANGE"] = ((df["CLOSE_PRICE"] - df["PREV_CLOSE"]) / df["PREV_CLOSE"]) * 100
 
-df = df.dropna(subset=["CLOSE_PRICE", "PREV_CLOSE"])
-
-# -------------------------------
-# 3️⃣ CALCULATE % CHANGE
-# -------------------------------
-
-df["PCT_CHANGE"] = (
-    (df["CLOSE_PRICE"] - df["PREV_CLOSE"]) / df["PREV_CLOSE"]
-) * 100
-
-# -------------------------------
-# 4️⃣ MOMENTUM SCORE
-# (Price strength + Volume strength)
-# -------------------------------
+# =========================
+# MOMENTUM SCORE
+# =========================
 
 df["MOMENTUM_SCORE"] = (
-    (df["PCT_CHANGE"] * 2) +
-    (df["TTL_TRD_QNTY"] / 1_000_000)
+    df["PCT_CHANGE"].abs() * 2
 )
 
-# -------------------------------
-# 5️⃣ ACCUMULATION SCORE
-# (Delivery + Volume)
-# -------------------------------
+# =========================
+# ACCUMULATION SCORE
+# =========================
 
 df["ACCUMULATION_SCORE"] = (
-    (df["DELIV_PER"] * 1.5) +
-    (df["TTL_TRD_QNTY"] / 2_000_000)
+    df["DELIV_PER"] * 1.5
 )
 
-# -------------------------------
-# 6️⃣ FINAL SCORE (Weighted)
-# -------------------------------
+# =========================
+# FINAL SCORE
+# =========================
 
-df["FINAL_SCORE"] = (
-    df["MOMENTUM_SCORE"] * 0.6 +
-    df["ACCUMULATION_SCORE"] * 0.4
-)
+df["FINAL_SCORE"] = df["MOMENTUM_SCORE"] + df["ACCUMULATION_SCORE"]
 
-# -------------------------------
-# 7️⃣ SORT & TAKE TOP 20
-# -------------------------------
+# =========================
+# SORT & SAVE
+# =========================
 
 df = df.sort_values("FINAL_SCORE", ascending=False)
 
-output = df[[
+output_columns = [
     "SYMBOL",
     "CLOSE_PRICE",
     "PCT_CHANGE",
@@ -82,12 +66,8 @@ output = df[[
     "MOMENTUM_SCORE",
     "ACCUMULATION_SCORE",
     "FINAL_SCORE"
-]].head(20)
+]
 
-# -------------------------------
-# 8️⃣ SAVE OUTPUT
-# -------------------------------
+df[output_columns].to_excel("swing_output.xlsx", index=False)
 
-output.to_excel("swing_output.xlsx", index=False)
-
-print("✅ Scanner Completed Successfully")
+print("Scanner completed successfully ✅")
