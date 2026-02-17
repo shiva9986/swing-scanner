@@ -1,78 +1,85 @@
 import pandas as pd
 import os
 
-print("Starting scanner...")
-
-# =========================
-# LOAD BHAVCOPY
-# =========================
+# ===============================
+# Load Bhavcopy
+# ===============================
 
 file_path = "data/bhavcopy.csv"
 
 if not os.path.exists(file_path):
-    print("ERROR: bhavcopy file not found!")
+    print("❌ bhavcopy.csv not found inside data folder")
     exit()
 
 df = pd.read_csv(file_path)
 
-print("Columns found:", df.columns.tolist())
-print("Rows loaded:", len(df))
+print("Rows Loaded:", len(df))
 
-# =========================
-# CLEAN COLUMN NAMES
-# =========================
+# ===============================
+# Clean Column Names
+# ===============================
 
 df.columns = df.columns.str.strip().str.upper()
 
-# Rename if needed
-if "TOTTRDQTY" in df.columns:
-    df.rename(columns={"TOTTRDQTY": "TTL_TRD_QNTY"}, inplace=True)
-
-# Ensure required columns exist
-required_cols = ["SYMBOL", "SERIES", "CLOSE", "TTL_TRD_QNTY"]
+# Required Columns Check
+required_cols = ["SYMBOL", "SERIES", "CLOSE", "TOTTRDQTY", "PCTCHG"]
 
 for col in required_cols:
     if col not in df.columns:
-        print(f"ERROR: Missing column {col}")
+        print(f"❌ Missing column: {col}")
         exit()
 
-# Filter EQ series only
-df = df[df["SERIES"] == "EQ"]
+# ===============================
+# Filter Only EQ Stocks
+# ===============================
 
-if df.empty:
-    print("No EQ stocks found.")
-    exit()
+df = df[df["SERIES"] == "EQ"].copy()
 
-# =========================
-# CALCULATIONS
-# =========================
+# ===============================
+# Convert Numeric Columns
+# ===============================
 
 df["CLOSE"] = pd.to_numeric(df["CLOSE"], errors="coerce")
-df["TTL_TRD_QNTY"] = pd.to_numeric(df["TTL_TRD_QNTY"], errors="coerce")
+df["TOTTRDQTY"] = pd.to_numeric(df["TOTTRDQTY"], errors="coerce")
+df["PCTCHG"] = pd.to_numeric(df["PCTCHG"], errors="coerce")
 
-df = df.dropna()
+df.dropna(inplace=True)
 
-# Momentum Score
-df["MOMENTUM_SCORE"] = df["CLOSE"] * 0.6
+# ===============================
+# MOMENTUM SCORE
+# ===============================
 
-# Accumulation Score
-df["ACCUMULATION_SCORE"] = df["TTL_TRD_QNTY"] * 0.0001
+df["MOMENTUM_SCORE"] = (
+    (df["PCTCHG"] * 2) +
+    (df["TOTTRDQTY"] / df["TOTTRDQTY"].mean())
+)
 
-# Final Score
+# ===============================
+# ACCUMULATION SCORE
+# ===============================
+
+df["ACCUMULATION_SCORE"] = (
+    (df["TOTTRDQTY"] / df["TOTTRDQTY"].max()) * 100
+)
+
+# ===============================
+# FINAL SCORE
+# ===============================
+
 df["FINAL_SCORE"] = df["MOMENTUM_SCORE"] + df["ACCUMULATION_SCORE"]
 
+# ===============================
 # Sort
+# ===============================
+
 df = df.sort_values("FINAL_SCORE", ascending=False)
 
-# Keep top 50
-df = df.head(50)
-
-# =========================
-# SAVE OUTPUT
-# =========================
+# ===============================
+# Save Output
+# ===============================
 
 output_file = "swing_output.xlsx"
 
 df.to_excel(output_file, index=False)
 
-print("File saved successfully:", output_file)
+print("✅ Output file created successfully:", output_file)
