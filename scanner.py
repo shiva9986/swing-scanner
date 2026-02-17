@@ -1,63 +1,50 @@
 import pandas as pd
+import numpy as np
 
-# Load bhavcopy from GitHub data folder
+# ===== LOAD FILE =====
 df = pd.read_csv("data/bhavcopy.csv")
 
 print("Rows Loaded:", len(df))
+print("Columns Found:", df.columns.tolist())
 
-# Keep only EQ series
-df = df[df["SERIES"] == "EQ"].copy()
+# ===== CLEAN COLUMN NAMES =====
+df.columns = df.columns.str.strip().str.upper()
 
-# Convert required columns to numeric
-numeric_cols = [
-    "PREV_CLOSE",
-    "CLOSE_PRICE",
-    "TTL_TRD_QNTY",
-    "DELIV_PER"
-]
+# ===== FILTER ONLY EQ SERIES (if exists) =====
+if "SERIES" in df.columns:
+    df = df[df["SERIES"] == "EQ"]
+
+# ===== CALCULATE PERCENT CHANGE =====
+df["PCT_CHANGE"] = ((df["CLOSE_PRICE"] - df["PREV_CLOSE"]) / df["PREV_CLOSE"]) * 100
+
+# ===== CLEAN NUMERIC COLUMNS =====
+numeric_cols = ["PCT_CHANGE", "DELIV_PER", "TTL_TRD_QNTY"]
 
 for col in numeric_cols:
     df[col] = pd.to_numeric(df[col], errors="coerce")
 
 df = df.dropna(subset=numeric_cols)
 
-# =========================
-# CALCULATE PERCENT CHANGE
-# =========================
-df["PCT_CHANGE"] = (
-    (df["CLOSE_PRICE"] - df["PREV_CLOSE"]) 
-    / df["PREV_CLOSE"]
-) * 100
-
-# =========================
-# MOMENTUM SCORE
-# =========================
+# ===== MOMENTUM SCORE =====
 df["MOMENTUM_SCORE"] = (
-    df["PCT_CHANGE"] * 50 +
-    (df["TTL_TRD_QNTY"] / df["TTL_TRD_QNTY"].max()) * 50
+    df["PCT_CHANGE"] * 0.6 +
+    (df["TTL_TRD_QNTY"] / df["TTL_TRD_QNTY"].max()) * 40
 )
 
-# =========================
-# ACCUMULATION SCORE
-# =========================
+# ===== ACCUMULATION SCORE =====
 df["ACCUMULATION_SCORE"] = (
     df["DELIV_PER"] * 0.7 +
     (df["TTL_TRD_QNTY"] / df["TTL_TRD_QNTY"].max()) * 30
 )
 
-# =========================
-# FINAL SCORE
-# =========================
-df["FINAL_SCORE"] = (
-    df["MOMENTUM_SCORE"] * 0.6 +
-    df["ACCUMULATION_SCORE"] * 0.4
-)
+# ===== FINAL SCORE =====
+df["FINAL_SCORE"] = df["MOMENTUM_SCORE"] + df["ACCUMULATION_SCORE"]
 
-# Sort by final score
+# ===== SORT =====
 df = df.sort_values("FINAL_SCORE", ascending=False)
 
-# Select output columns
-output = df[[
+# ===== SELECT OUTPUT =====
+output_cols = [
     "SYMBOL",
     "CLOSE_PRICE",
     "PCT_CHANGE",
@@ -66,9 +53,11 @@ output = df[[
     "MOMENTUM_SCORE",
     "ACCUMULATION_SCORE",
     "FINAL_SCORE"
-]].head(20)
+]
 
-# Save Excel properly
-output.to_excel("swing_output.xlsx", index=False)
+df_output = df[output_cols]
 
-print("Scanner Completed Successfully")
+# ===== SAVE FILE =====
+df_output.to_excel("swing_output.xlsx", index=False)
+
+print("✅ Scanner Completed Successfully")
