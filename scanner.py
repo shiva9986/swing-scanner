@@ -1,97 +1,116 @@
 import pandas as pd
 import numpy as np
+import os
 
-# ===============================
-# LOAD BHAVCOPY
-# ===============================
-df = pd.read_csv("data/bhavcopy.csv")
+print("Starting Scanner...")
+
+# -----------------------------
+# Load File
+# -----------------------------
+file_path = "data/bhavcopy.csv"
+
+if not os.path.exists(file_path):
+    print("Bhavcopy file not found!")
+    exit()
+
+df = pd.read_csv(file_path)
 
 print("Rows Loaded:", len(df))
 
-# Keep only EQ series
-df = df[df["SERIES"] == "EQ"]
+# -----------------------------
+# Clean Column Names
+# -----------------------------
+df.columns = df.columns.str.strip().str.upper()
 
-# ===============================
-# SAFE COLUMN HANDLING
-# ===============================
-df.columns = df.columns.str.strip()
+print("Columns Found:", df.columns.tolist())
 
-# Convert required columns safely
-numeric_cols = [
-    "CLOSE_PRICE",
-    "PREV_CLOSE",
-    "TTL_TRD_QNTY",
-    "DELIV_PER"
-]
+# -----------------------------
+# Filter Only EQ (if available)
+# -----------------------------
+if "SERIES" in df.columns:
+    df = df[df["SERIES"].astype(str).str.upper() == "EQ"]
+    print("EQ Rows:", len(df))
+else:
+    print("SERIES column not found — skipping filter")
 
-for col in numeric_cols:
-    if col in df.columns:
+# -----------------------------
+# Required Columns Mapping
+# -----------------------------
+required_cols = {
+    "SYMBOL": "SYMBOL",
+    "CLOSE": "CLOSE_PRICE",
+    "LAST": "LAST_PRICE",
+    "PCT": "PCT_CHANGE",
+    "DELIV": "DELIV_PER",
+    "VOLUME": "TTL_TRD_QNTY"
+}
+
+# Try auto-detect close price
+if "CLOSE_PRICE" in df.columns:
+    close_col = "CLOSE_PRICE"
+elif "LAST_PRICE" in df.columns:
+    close_col = "LAST_PRICE"
+else:
+    print("No Close price column found")
+    exit()
+
+# Auto detect percentage change
+pct_col = None
+for col in df.columns:
+    if "PCT" in col:
+        pct_col = col
+        break
+
+# Auto detect volume
+vol_col = None
+for col in df.columns:
+    if "QNTY" in col or "VOLUME" in col:
+        vol_col = col
+        break
+
+# Auto detect delivery
+deliv_col = None
+for col in df.columns:
+    if "DELIV" in col:
+        deliv_col = col
+        break
+
+print("Using Columns:")
+print("Close:", close_col)
+print("Pct:", pct_col)
+print("Volume:", vol_col)
+print("Delivery:", deliv_col)
+
+# -----------------------------
+# Convert Numeric
+# -----------------------------
+for col in [close_col, pct_col, vol_col, deliv_col]:
+    if col:
         df[col] = pd.to_numeric(df[col], errors="coerce")
-    else:
-        print(f"Column missing: {col}")
 
-# ===============================
-# CALCULATIONS
-# ===============================
+# -----------------------------
+# Create Scores
+# -----------------------------
+df["MOMENTUM_SCORE"] = 0
+df["ACCUMULATION_SCORE"] = 0
 
-# % Change
-df["PCT_CHANGE"] = (
-    (df["CLOSE_PRICE"] - df["PREV_CLOSE"]) /
-    df["PREV_CLOSE"]
-) * 100
+if pct_col:
+    df["MOMENTUM_SCORE"] = df[pct_col].fillna(0) * 100
 
-# Volume Score (normalized)
-df["VOL_SCORE"] = (
-    df["TTL_TRD_QNTY"] /
-    df["TTL_TRD_QNTY"].max()
-) * 100
+if vol_col and deliv_col:
+    df["ACCUMULATION_SCORE"] = (
+        df[vol_col].fillna(0) * df[deliv_col].fillna(0)
+    ) / 1000000
 
-# ===============================
-# MOMENTUM SCORE
-# ===============================
-df["MOMENTUM_SCORE"] = (
-    (df["PCT_CHANGE"] * 0.6) +
-    (df["VOL_SCORE"] * 0.4)
-)
+df["FINAL_SCORE"] = df["MOMENTUM_SCORE"] + df["ACCUMULATION_SCORE"]
 
-# ===============================
-# ACCUMULATION SCORE
-# ===============================
-df["ACCUMULATION_SCORE"] = (
-    (df["DELIV_PER"] * 0.7) +
-    (df["VOL_SCORE"] * 0.3)
-)
-
-# ===============================
-# FINAL SCORE
-# ===============================
-df["FINAL_SCORE"] = (
-    df["MOMENTUM_SCORE"] * 0.6 +
-    df["ACCUMULATION_SCORE"] * 0.4
-)
-
-# ===============================
-# SORT
-# ===============================
+# -----------------------------
+# Sort & Export
+# -----------------------------
 df = df.sort_values("FINAL_SCORE", ascending=False)
 
-# ===============================
-# SELECT OUTPUT COLUMNS
-# ===============================
-output = df[[
-    "SYMBOL",
-    "CLOSE_PRICE",
-    "PCT_CHANGE",
-    "DELIV_PER",
-    "TTL_TRD_QNTY",
-    "MOMENTUM_SCORE",
-    "ACCUMULATION_SCORE",
-    "FINAL_SCORE"
-]]
+output_file = "swing_output.csv"
+df.to_csv(output_file, index=False)
 
-# ===============================
-# SAVE OUTPUT
-# ===============================
-output.to_excel("swing_output.xlsx", index=False)
-
-print("Scanner Completed Successfully ✅")
+print("Scanner Completed Successfully")
+print("Output Saved:", output_file)
